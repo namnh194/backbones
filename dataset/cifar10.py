@@ -8,6 +8,7 @@ def get_train_valid_loader(data_dir,
                            batch_size,
                            augment,
                            random_seed,
+                           resize=(227,227),
                            valid_size=0.1,
                            shuffle=True):
     normalize = transforms.Normalize(
@@ -17,7 +18,7 @@ def get_train_valid_loader(data_dir,
 
     # define transforms
     valid_transform = transforms.Compose([
-        transforms.Resize((227, 227)),
+        transforms.Resize(resize),
         transforms.ToTensor(),
         normalize,
     ])
@@ -30,7 +31,7 @@ def get_train_valid_loader(data_dir,
         ])
     else:
         train_transform = transforms.Compose([
-            transforms.Resize((227, 227)),
+            transforms.Resize(resize),
             transforms.ToTensor(),
             normalize,
         ])
@@ -69,6 +70,7 @@ def get_train_valid_loader(data_dir,
 
 def get_test_loader(data_dir,
                     batch_size,
+                    resize=(227,227),
                     shuffle=True):
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406],
@@ -77,7 +79,7 @@ def get_test_loader(data_dir,
 
     # define transform
     transform = transforms.Compose([
-        transforms.Resize((227, 227)),
+        transforms.Resize(resize),
         transforms.ToTensor(),
         normalize,
     ])
