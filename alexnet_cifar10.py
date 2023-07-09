@@ -1,5 +1,4 @@
-from dataset.cifar10 import *
-import torch
+from dataset.cifar10 import get_train_valid_loader, get_test_loader
 from model.alexnet import *
 
 
