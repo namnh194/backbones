@@ -1,10 +1,8 @@
-import torch, torchvision
+import torch
 import torch.nn as nn
-import numpy as np
-from torchvision import transforms, datasets
 
 class AlexNet(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes=10):
         super(AlexNet, self).__init__()
         self.block1 = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=96, kernel_size=11, stride=4, padding=0),
