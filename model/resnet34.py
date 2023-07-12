@@ -33,7 +33,7 @@ class ResNet34(nn.Module):
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=2, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU())
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer2 = self._make_layer(block, 64, time_layers[0], 1)
         self.layer3 = self._make_layer(block, 128, time_layers[1], 2)
         self.layer4 = self._make_layer(block, 256, time_layers[2], 2)
@@ -44,28 +44,30 @@ class ResNet34(nn.Module):
         layer = []
         if stride_first != 1:
             downsample = nn.Sequential(
-                nn.Conv2d(in_channels=kernel_size, out_channels=kernel_size, kernel_size=1, stride=stride_first),
+                nn.Conv2d(in_channels=kernel_size//2, out_channels=kernel_size, kernel_size=1, stride=stride_first),
                 nn.BatchNorm2d(kernel_size))
             layer.append(block(in_channels=kernel_size//2, out_channels=kernel_size, stride=stride_first, downsample=downsample))
         else:
             layer.append(block(in_channels=kernel_size, out_channels=kernel_size))
         for i in range(1, times):
-            layer.append(layer.append(block(in_channels=kernel_size, out_channels=kernel_size)))
+            layer.append(block(in_channels=kernel_size, out_channels=kernel_size))
         return nn.Sequential(*layer)
 
     def forward(self, x):
-        out = self.layer1(x) # batch x 3 x 112 x 112
-        out = self.pool1(out) # batch x 64 x 56 x 56
-        out = self.layer2(out) #
-        # out = self.layer3(out)
-        # out = self.layer4(out)
-        # out = self.layer5(out)
-        # out = self.pool2(out)
-        # out = out.view(out.shape[0], -1)
-        # out = self.fc(out)
+        out = self.layer1(x)
+        out = self.pool1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.layer5(out)
+        out = self.pool2(out)
+        out = out.view(out.shape[0], -1)
+        out = self.fc(out)
         return out
+
 
 if __name__ == "__main__":
     x = torch.randn((1,3,227,227), dtype=torch.float)
     net = ResNet34(ResidualBlock, [3,4,6,3])
+    print(sum(p.numel() for p in net.parameters() if p.requires_grad))
     print(net(x).shape)
