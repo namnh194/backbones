@@ -5,19 +5,22 @@ from model.alexnet import *
 # hyperparam
 num_classes = 10
 num_epochs = 20
-batch_size = 64
+batch_size = 128
 learning_rate = 0.005
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-train_loader, valid_loader = get_train_valid_loader(data_dir='./data', batch_size=64,
+train_loader, valid_loader = get_train_valid_loader(data_dir='./data', batch_size=batch_size,
                                                     augment=False, random_seed=1)
 test_loader = get_test_loader(data_dir='./data',
-                              batch_size=64)
+                              batch_size=batch_size)
 model = AlexNet(num_classes).to(device)
 
 
 # Loss and optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.005)
+# use adam or sgd optimizer
+# optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=0.005)
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
+lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 150], gamma=0.1)
 
 
 # Train the model
