@@ -46,15 +46,16 @@ class DenseBlock(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
     def forward(self, x):
-        self.layer = []
-        for i in range(len(self.times)):
-            self.layer.append(ConvBlock(self.in_channels, self.out_channels, self.times[i]))
-        x1 = self.layer[0](x)
-        x2 = self.layer[1](torch.cat([x,x1], dim=1))
-        x3 = self.layer[2](torch.cat([x,x1,x2], dim=1))
-        x4 = self.layer[3](torch.cat([x,x1,x2,x3], dim=1))
-        x5 = torch.cat([x,x1,x2,x3,x4], dim=1)
-        return x4
+        x1 = ConvBlock(self.in_channels, self.out_channels, self.times[0])(x)
+        _ = torch.cat([x,x1], dim=1)
+        x2 = ConvBlock(_.shape[1], self.out_channels, self.times[1])(_)
+        _ = torch.cat([x,x1,x2], dim=1)
+        x3 = ConvBlock(_.shape[1], self.out_channels, self.times[2])(_)
+        _ = torch.cat([x,x1,x2,x3], dim=1)
+        x4 = ConvBlock(_.shape[1], self.out_channels, self.times[3])(_)
+        del _
+        _ = torch.cat([x,x1,x2,x3,x4], dim=1)
+        return _
 
 class DenseNet(nn.Module):
     def __init__(self, in_channels, out_channels):
