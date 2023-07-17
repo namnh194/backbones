@@ -34,15 +34,16 @@ class DenseBlock(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
     def forward(self, x):
-        x1 = ConvBlock(self.in_channels, self.out_channels, self.times[0])(x)
-        _ = torch.cat([x,x1], dim=1)
-        x2 = ConvBlock(_.shape[1], self.out_channels, self.times[1])(_)
-        _ = torch.cat([x,x1,x2], dim=1)
-        x3 = ConvBlock(_.shape[1], self.out_channels, self.times[2])(_)
-        _ = torch.cat([x,x1,x2,x3], dim=1)
-        x4 = ConvBlock(_.shape[1], self.out_channels, self.times[3])(_)
-        del _
-        _ = torch.cat([x,x1,x2,x3,x4], dim=1)
+        device = x.device
+        x1 = ConvBlock(self.in_channels, self.out_channels, self.times[0])(x).to(device)
+        _ = torch.cat([x,x1], dim=1).to(device)
+        x2 = ConvBlock(_.shape[1], self.out_channels, self.times[1])(_).to(device)
+        _ = torch.cat([x,x1,x2], dim=1).to(device)
+        x3 = ConvBlock(_.shape[1], self.out_channels, self.times[2])(_).to(device)
+        _ = torch.cat([x,x1,x2,x3], dim=1).to(device)
+        x4 = ConvBlock(_.shape[1], self.out_channels, self.times[3])(_).to(device)
+        _ = torch.cat([x,x1,x2,x3,x4], dim=1).to(device)
+        del x1,x2,x3,x4
         return _
 
 class DenseNet(nn.Module):
