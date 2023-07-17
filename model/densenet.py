@@ -26,18 +26,6 @@ class ConvBlock(nn.Module):
         x = self.block(x)
         return x
 
-class TransitionBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(TransitionBlock, self).__init__()
-        self.transition = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(),
-            nn.AvgPool2d(kernel_size=2, stride=2, padding=0))
-    def forward(self, x):
-        out = self.transition(x)
-        return out
-
 
 class DenseBlock(nn.Module):
     def __init__(self, in_channels, out_channels, times):
@@ -58,20 +46,47 @@ class DenseBlock(nn.Module):
         return _
 
 class DenseNet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, num_classes, in_channels, grown_rate=32):
         super(DenseNet, self).__init__()
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=7, stride=2, padding=3),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(in_channels=in_channels, out_channels=grown_rate*2, kernel_size=7, stride=2, padding=3),
+            nn.BatchNorm2d(grown_rate*2),
             nn.ReLU())
         self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.dense1 = DenseBlock(out_channels, out_channels, [6,6,6,6])
-        self.transition1 = TransitionBlock(out_channels=out_channels)
-
+        self.dense1 = DenseBlock(grown_rate*2, grown_rate*4, [6,6,6,6])
+        self.transition1 = self._make_transition(grown_rate*18, grown_rate*9)
+        self.dense2 = DenseBlock(grown_rate*9, grown_rate*6, [12,12,12,12])
+        self.transition2 = self._make_transition(grown_rate*33, int(grown_rate*16.5))
+        self.dense3 = DenseBlock(int(grown_rate*16.5), grown_rate*9, [24,32,48,64])
+        self.transition3 = self._make_transition(int(grown_rate*52.5), int(grown_rate*4.5))
+        self.dense4 = DenseBlock(int(grown_rate*4.5), int(grown_rate*12.5), [16,32,32,48])
+        self.pool2 = nn.AvgPool2d(kernel_size=7, stride=1, padding=3)
+        self.fc = nn.Linear(int(grown_rate*54.5)*7*7, 1000)
+        self.cls = nn.Sequential(nn.Linear(1000,512), nn.Dropout(0.4), nn.Linear(512,num_classes))
+    def _make_transition(self, in_channels, out_channels):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2, padding=0))
     def forward(self, x):
-        return
+        out = self.conv1(x)
+        out = self.pool1(out)
+        out = self.dense1(out)
+        out = self.transition1(out)
+        out = self.dense2(out)
+        out = self.transition2(out)
+        out = self.dense3(out)
+        out = self.transition3(out)
+        out = self.dense4(out)
+        out = self.pool2(out)
+        out = out.view(out.shape[0], -1)
+        out = self.fc(out)
+        out = self.cls(out)
+        return out
 
 if __name__ == "__main__":
-    net = DenseBlock(in_channels=3, out_channels=64, times=[3,2,3])
-    x = torch.randn((1,3,24,24), dtype=torch.float)
+    net = DenseNet(num_classes=10, in_channels=3, grown_rate=32)
+    print(sum(p.numel() for p in net.parameters() if p.requires_grad))
+    x = torch.randn((1,3,224,224), dtype=torch.float)
     print(net(x).shape)
