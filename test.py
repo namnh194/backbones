@@ -100,3 +100,5 @@ if __name__ == "__main__":
     net2 = ResNeXt(resnext_block, [3, 4, 6, 3], cardinality=32, bwidth=4, img_channels=3, num_classes=10)
     print(sum(p.numel() for p in net2.parameters() if p.requires_grad))
     print(net2(x).shape)
+    # print(net)
+    # print(net2)

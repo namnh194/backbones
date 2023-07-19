@@ -47,8 +47,9 @@ class Resnext50(nn.Module):
         out_channels = self.cardinality * self.width
         down_sample = None
         if stride_first != 1 or in_channels != out_channels * self.expand:
+            # this down_sample layer is important that kernel_size = 3 can increase num parameters twice
             down_sample = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels*self.expand, kernel_size=3, stride=stride_first, padding=1),
+                nn.Conv2d(in_channels, out_channels*self.expand, kernel_size=1, stride=stride_first, padding=0),
                 nn.BatchNorm2d(out_channels*self.expand),
                 nn.ReLU())
         layer.append(block(in_channels, out_channels, expand=self.expand, stride=stride_first, down_sample=down_sample))
