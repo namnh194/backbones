@@ -10,13 +10,13 @@ class Resnext_block(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Conv2d(out_channels, out_channels, groups=cardinality, kernel_size=3, stride=stride, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
+            nn.ReLU(),
             nn.Conv2d(out_channels, out_channels*expand, kernel_size=1, stride=1, padding=0),
             nn.BatchNorm2d(out_channels*expand),
-            nn.ReLU(inplace=True))
+            nn.ReLU())
     def forward(self, x):
         out = self.conv(x)
         if self.down_sample:
@@ -34,7 +34,7 @@ class Resnext50(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=2, padding=3),
             nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True))
+            nn.ReLU())
         self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, block_config[0], 1)
         self.layer2 = self._make_layer(block, 256, block_config[1], 2)
@@ -50,7 +50,7 @@ class Resnext50(nn.Module):
             down_sample = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels*self.expand, kernel_size=3, stride=stride_first, padding=1),
                 nn.BatchNorm2d(out_channels*self.expand),
-                nn.ReLU(inplace=True))
+                nn.ReLU())
         layer.append(block(in_channels, out_channels, expand=self.expand, stride=stride_first, down_sample=down_sample))
         for i in range(num_layer-1):
             layer.append(block(out_channels*self.expand, out_channels, expand=self.expand, down_sample=None))
