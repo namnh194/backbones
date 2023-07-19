@@ -15,13 +15,13 @@ class Resnext_block(nn.Module):
             nn.BatchNorm2d(out_channels),
             nn.ReLU(),
             nn.Conv2d(out_channels, out_channels*expand, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(out_channels*expand),
-            nn.ReLU())
+            nn.BatchNorm2d(out_channels*expand))
+        self.relu = nn.ReLU()
     def forward(self, x):
         out = self.conv(x)
         if self.down_sample:
             x = self.down_sample(x)
-        out += x
+        out = self.relu(out + x)
         return out
 
 class Resnext50(nn.Module):
@@ -50,8 +50,7 @@ class Resnext50(nn.Module):
             # this down_sample layer is important that kernel_size = 3 can increase num parameters twice
             down_sample = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels*self.expand, kernel_size=1, stride=stride_first, padding=0),
-                nn.BatchNorm2d(out_channels*self.expand),
-                nn.ReLU())
+                nn.BatchNorm2d(out_channels*self.expand))
         layer.append(block(in_channels, out_channels, expand=self.expand, stride=stride_first, down_sample=down_sample))
         for i in range(num_layer-1):
             layer.append(block(out_channels*self.expand, out_channels, expand=self.expand, down_sample=None))
