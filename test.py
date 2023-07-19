@@ -1,68 +1,102 @@
 import torch
 import torch.nn as nn
 
-
-class myBatchNorm2d(nn.Module):
-    def __init__(self, input_size=None, epsilon=1e-3, momentum=0.99):
-        super(myBatchNorm2d, self).__init__()
-        assert input_size, print('Missing input_size parameter.')
-
-        # Batch mean & var must be defined during training
-        self.mu = torch.zeros(1, input_size[0], input_size[1], input_size[2])
-        self.var = torch.ones(1, input_size[0], input_size[1], input_size[2])
-
-        # For numerical stability
-        self.epsilon = epsilon
-
-        # Exponential moving average for mu & var update 
-        self.it_call = 0  # training iterations
-        self.momentum = momentum  # EMA smoothing
-
-        # Trainable parameters
-        self.beta = torch.nn.Parameter(torch.zeros(1, input_size[0], input_size[1], input_size[2]))
-        self.gamma = torch.nn.Parameter(torch.ones(1, input_size[0], input_size[1], input_size[2]))
-
-        # Batch size on which the normalization is computed
-        self.batch_size = 0
+class resnext_block(nn.Module):
+    def __init__(self, in_channels, cardinality, bwidth, idt_downsample=None, stride=1):
+        super(resnext_block, self).__init__()
+        self.expansion = 2
+        out_channels = cardinality * bwidth
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, groups=cardinality, stride=stride, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.conv3 = nn.Conv2d(out_channels, out_channels*self.expansion, kernel_size=1, stride=1, padding=0)
+        self.bn3 = nn.BatchNorm2d(out_channels*self.expansion)
+        self.relu = nn.ReLU()
+        self.identity_downsample = idt_downsample
 
     def forward(self, x):
-        # [batch_size, input_size]
+        identity = x
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
+        x = self.conv3(x)
+        x = self.bn3(x)
 
-        self.it_call += 1
+        if self.identity_downsample is not None:
+            identity = self.identity_downsample(identity)
 
-        if (self.batch_size == 0):
-            # First iteration : save batch_size
-            self.batch_size = x.shape[0]
+        x += identity
+        x = self.relu(x)
+        return x
 
-        # Training : compute BN pass
-        batch_mu = (x.sum(dim=0) / x.shape[0]).unsqueeze(0)  # [1, input_size]
-        print("batch_mu size:", batch_mu.shape)
-        batch_var = (x.var(dim=0) / x.shape[0]).unsqueeze(0)  # [1, input_size]
-        print("batch_var size:", batch_var.shape)
-        print("batch_var value:", batch_var)
 
-        x_normalized = (x - batch_mu) / torch.sqrt(batch_var + self.epsilon)  # [batch_size, input_size]
-        print("x_norm size:", x_normalized.shape)
-        print("x_norm value:", x_normalized)
-        x_bn = self.gamma * x_normalized + self.beta  # [batch_size, input_size]
-        print("x_bn size:", x_bn.shape)
-        print("x_bn value:", x_bn)
+class ResNeXt(nn.Module):
+    def __init__(self, resnet_block, layers, cardinality, bwidth, img_channels, num_classes):
+        super(ResNeXt, self).__init__()
+        self.in_channels = 64
+        self.conv1 = nn.Conv2d(img_channels, 64, kernel_size=7, stride=2, padding=3)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU()
+        self.cardinality = cardinality
+        self.bwidth = bwidth
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        # Update mu & std
-        if (x.shape[0] == self.batch_size):
-            running_mu = batch_mu
-            running_var = batch_var
-        else:
-            running_mu = batch_mu * self.batch_size / x.shape[0]
-            running_var = batch_var * self.batch_size / x.shape[0]
+        # ResNeXt Layers
+        self.layer1 = self._layers(resnext_block, layers[0], stride=1)
+        self.layer2 = self._layers(resnext_block, layers[1], stride=2)
+        self.layer3 = self._layers(resnext_block, layers[2], stride=2)
+        self.layer4 = self._layers(resnext_block, layers[3], stride=2)
 
-        self.mu = running_mu * (self.momentum / self.it_call) + \
-                  self.mu * (1 - (self.momentum / self.it_call))
-        self.var = running_var * (self.momentum / self.it_call) + \
-                   self.var * (1 - (self.momentum / self.it_call))
-        return x_bn  # [batch_size, output_size=input_size]
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(self.cardinality * self.bwidth, num_classes)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = x.reshape(x.shape[0], -1)
+        x = self.fc(x)
+        return x
+
+    def _layers(self, resnext_block, no_residual_blocks, stride):
+        identity_downsample = None
+        out_channels = self.cardinality * self.bwidth
+        layers = []
+
+        if stride != 1 or self.in_channels != out_channels * 2:
+            identity_downsample = nn.Sequential(nn.Conv2d(self.in_channels, out_channels * 2, kernel_size=1,
+                                                          stride=stride),
+                                                nn.BatchNorm2d(out_channels * 2))
+
+        layers.append(resnext_block(self.in_channels, self.cardinality, self.bwidth, identity_downsample, stride))
+        self.in_channels = out_channels * 2
+
+        for i in range(no_residual_blocks - 1):
+            layers.append(resnext_block(self.in_channels, self.cardinality, self.bwidth))
+
+        self.bwidth *= 2
+        return nn.Sequential(*layers)
 
 if __name__ == "__main__":
-    net = myBatchNorm2d(input_size=(3,1,1))
-    x = torch.randn((1,3,1,1), dtype=torch.float)
-    print("output shape: ",net(x).shape)
+    from model.resnext50 import *
+    x = torch.randn((1, 3, 224, 224), dtype=torch.float)
+    net = Resnext50(10, Resnext_block, [3, 4, 6, 3])
+    print(sum(p.numel() for p in net.parameters() if p.requires_grad))
+    print(net(x).shape)
+
+    print("-----")
+    net2 = ResNeXt(resnext_block, [3, 4, 6, 3], cardinality=32, bwidth=4, img_channels=3, num_classes=10)
+    print(sum(p.numel() for p in net2.parameters() if p.requires_grad))
+    print(net2(x).shape)

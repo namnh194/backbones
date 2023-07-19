@@ -3,79 +3,74 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, width=4, cardinality=32, stride=1, downsample=None):
-        super(ResidualBlock, self).__init__()
-        self.cardinality = cardinality
-        self.downsample = downsample
-        self.conv = nn.ModuleList()
-        for i in range(cardinality):
-            self.conv.append(nn.Sequential(
-            nn.Conv2d(in_channels, width, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(width),
-            nn.ReLU(),
-            nn.Conv2d(width, width, kernel_size=3, stride=stride, padding=1),
-            nn.BatchNorm2d(width),
-            nn.ReLU(),
-            nn.Conv2d(width, out_channels*2, kernel_size=1, stride=1, padding=0),
-            nn.BatchNorm2d(out_channels*2),
-            nn.ReLU()))
+class Resnext_block(nn.Module):
+    def __init__(self, in_channels, out_channels, expand=2, cardinality=32, stride=1, down_sample=None):
+        super(Resnext_block, self).__init__()
+        self.down_sample = down_sample
+        self.conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, groups=cardinality, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels*expand, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(out_channels*expand),
+            nn.ReLU(inplace=True))
     def forward(self, x):
-        feature = 0
-        for i in range(self.cardinality):
-            feature += self.conv[i](x)
-        if self.downsample:
-            x = self.downsample(x)
-        feature = feature + x
-        return feature
+        out = self.conv(x)
+        if self.down_sample:
+            x = self.down_sample(x)
+        out += x
+        return out
 
-class ResNext50(nn.Module):
-    def __init__(self, num_classes, block, config):
-        super(ResNext50, self).__init__()
+class Resnext50(nn.Module):
+    def __init__(self, num_classes, block, block_config, width=4, expand=2, cardinality=32):
+        super(Resnext50, self).__init__()
+        self.width = width
+        self.expand = expand
+        self.cardinality = cardinality
+
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=2, padding=3),
             nn.BatchNorm2d(64),
-            nn.ReLU())
+            nn.ReLU(inplace=True))
         self.pool1 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.block1 = self._make_layer(block, 64, 128, config[0], 1)
-        self.block2 = self._make_layer(block, 256, 256, config[1], 2)
-        self.block3 = self._make_layer(block, 512, 512, config[2], 2)
-        self.block4 = self._make_layer(block, 1024, 1024, config[3], 2)
+        self.layer1 = self._make_layer(block, 64, block_config[0], 1)
+        self.layer2 = self._make_layer(block, 256, block_config[1], 2)
+        self.layer3 = self._make_layer(block, 512, block_config[2], 2)
+        self.layer4 = self._make_layer(block, 1024, block_config[3], 2)
         self.pool2 = nn.AvgPool2d(kernel_size=7, stride=1, padding=0)
-        self.fc = nn.Sequential(
-            nn.Linear(2048, 512),
-            nn.Dropout(0.4),
-            nn.Linear(512, num_classes))
-    def _make_layer(self, block, in_channels, out_channels, times, stride):
+        self.fc = nn.Linear(2048, num_classes)
+    def _make_layer(self, block, in_channels, num_layer, stride_first):
         layer = []
-        if stride != 1:
-            downsample = nn.Sequential(
-                nn.Conv2d(in_channels, in_channels*2, kernel_size=3, stride=stride, padding=1),
-                nn.BatchNorm2d(in_channels*2),
-                nn.ReLU())
-        else:
-            downsample = nn.Sequential(
-                nn.Conv2d(in_channels, in_channels*4, kernel_size=3, stride=1, padding=1),
-                nn.BatchNorm2d(in_channels*4),
-                nn.ReLU())
-        layer.append(block(in_channels, out_channels, stride=stride, downsample=downsample))
-        for i in range(times-1):
-            layer.append(block(out_channels*2, out_channels, stride=1, downsample=None))
+        out_channels = self.cardinality * self.width
+        down_sample = None
+        if stride_first != 1 or in_channels != out_channels * self.expand:
+            down_sample = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels*self.expand, kernel_size=3, stride=stride_first, padding=1),
+                nn.BatchNorm2d(out_channels*self.expand),
+                nn.ReLU(inplace=True))
+        layer.append(block(in_channels, out_channels, expand=self.expand, stride=stride_first, down_sample=down_sample))
+        for i in range(num_layer-1):
+            layer.append(block(out_channels*self.expand, out_channels, expand=self.expand, down_sample=None))
+        self.width *= 2
         return nn.Sequential(*layer)
     def forward(self, x):
         out = self.conv1(x)
         out = self.pool1(out)
-        out = self.block1(out)
-        out = self.block2(out)
-        out = self.block3(out)
-        out = self.block4(out)
+        out = self.layer1(out)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
         out = self.pool2(out)
         out = out.view(out.shape[0], -1)
         out = self.fc(out)
         return out
 
+
 if __name__ == "__main__":
     x = torch.randn((1,3,224,224), dtype=torch.float)
-    net = ResNext50(num_classes=10, block=ResidualBlock, config=[3,4,6,3])
+    net = Resnext50(10, Resnext_block, [3,4,6,3])
     print(sum(p.numel() for p in net.parameters() if p.requires_grad))
     print(net(x).shape)
