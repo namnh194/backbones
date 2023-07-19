@@ -32,7 +32,7 @@ class Darknet19(nn.Module):
                 nn.BatchNorm2d(out_channels)]
         if kernel != 1:
             conv += [nn.ReLU()]
-        return conv
+        return nn.Sequential(*conv)
     def forward(self, x):
         out = self.model(x)
         out = out.view(out.shape[0], -1)
