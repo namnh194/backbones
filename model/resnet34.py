@@ -40,17 +40,17 @@ class ResNet34(nn.Module):
         self.layer5 = self._make_layer(block, 512, time_layers[3], 2)
         self.pool2 = nn.AvgPool2d(kernel_size=7, stride=1)
         self.fc = nn.Linear(512, num_classes)
-    def _make_layer(self, block, kernel_size, times, stride_first=1):
+    def _make_layer(self, block, in_channels, times, stride_first=1):
         layer = []
         if stride_first != 1:
             downsample = nn.Sequential(
-                nn.Conv2d(in_channels=kernel_size//2, out_channels=kernel_size, kernel_size=1, stride=stride_first),
-                nn.BatchNorm2d(kernel_size))
-            layer.append(block(in_channels=kernel_size//2, out_channels=kernel_size, stride=stride_first, downsample=downsample))
+                nn.Conv2d(in_channels=in_channels//2, out_channels=in_channels, kernel_size=1, stride=stride_first),
+                nn.BatchNorm2d(in_channels))
+            layer.append(block(in_channels=in_channels//2, out_channels=in_channels, stride=stride_first, downsample=downsample))
         else:
-            layer.append(block(in_channels=kernel_size, out_channels=kernel_size))
+            layer.append(block(in_channels=in_channels, out_channels=in_channels))
         for i in range(1, times):
-            layer.append(block(in_channels=kernel_size, out_channels=kernel_size))
+            layer.append(block(in_channels=in_channels, out_channels=in_channels))
         return nn.Sequential(*layer)
 
     def forward(self, x):
