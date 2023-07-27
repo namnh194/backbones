@@ -90,6 +90,6 @@ if __name__ == "__main__":
         output_group = [384, 768, 1536]
 
     x = torch.randn((1,3,224,224), dtype=torch.float)
-    net = ShuffleNet(10, Shuffle_unit, group=2, output_group=output_group, block_config=[4, 8, 4])
+    net = ShuffleNet(10, Shuffle_unit, group=group, output_group=output_group, block_config=[4, 8, 4])
     print(sum(p.numel() for p in net.parameters() if p.requires_grad))
     print(net(x).shape)
