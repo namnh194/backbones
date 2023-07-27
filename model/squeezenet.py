@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from alexnet import *
-
 class fire_module(nn.Module):
     def __init__(self, in_channels, s1x1, e1x1, e3x3, is_conv=False):
         super(fire_module, self).__init__()
