@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class CTC_loss(nn.Module):
     def __init__(self):
         super(CTC_loss, self).__init__()
